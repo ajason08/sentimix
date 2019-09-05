@@ -13,7 +13,7 @@ UpperCamelCase = re.compile(r'\s([A-Z][a-z])*\s')
 lowerCamelCase = re.compile(r'\s([A-Z][a-z])*\s')
 
 
-def internet_element_taggin(text, preserve_contet=False):
+def internet_element_taggin(text, preserve_con=False):
         """
         Detect and tagg common tweet elements: links, rt, hastag, pics.
 
@@ -61,4 +61,5 @@ def taggin_numbers(text, preserve_con=False):
 def split_cammel_case(text):
         camelcases = finditer('.+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)', identifier)
         splitted = [o.group(0) for o in matches]
-        return " ".join(splitted)
+        joined = " ".join(splitted)
+        return joined

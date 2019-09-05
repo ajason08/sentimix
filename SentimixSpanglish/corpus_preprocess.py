@@ -2,9 +2,11 @@ import pandas as pd
 import json
 from internet_taggin import internet_element_taggin, taggin_numbers
 
-CORPUS = "./data/spanglish_trial_release.txt"
 
-def open_data(data_file):
+TRIAL = "./data/spanglish_trial_release.txt"
+TRAIN = "./data/train.tsv"
+
+def open_data_JsonPerLine(data_file):
 	"""
 	Read txt data file whit one JSON object by line.
 
@@ -27,6 +29,26 @@ def open_data(data_file):
 	dataframe = pd.DataFrame(list_data)
 	return(dataframe)
 
+def open_data_Horrible_TSV(horrible_data_file):
+        dataframe = pd.read_csv(horrible_data_file,
+                                encoding="utf_8",
+                                sep="\t",
+                                header=None,
+                                names=["words","lang"])
+        dataframe = dataframe.fillna(value = "_____")
+        lastrow  = len(dataframe)-1
+        positives = dataframe[dataframe['lang'] == "positive"]
+        negatives = dataframe[dataframe['lang'] == "negative"]
+        neutral = dataframe[dataframe['lang'] == "neutral"]
+        concatena = pd.concat([positives,negatives, neutral])
+        phrase_limits = concatena.sort_index().index.tolist()
+        start = 0
+        phrase_df = pd.DataFrame(columns=["tweet","languages", "sentiment"])
+        for limit in phrase_limits:
+                sentiment = dataframe.iloc[limit]["lang"]
+                print (dataframe.iloc[start:limit])
+                sentence = "".join([dataframe.iloc[start:limit]["words"]])
+        return sentence
 
 def sentimix_data_reorder(sentimix_dataframe):
 	"""
@@ -73,7 +95,8 @@ def sentimixInternetTagging(dataframe):
         dataframe["tweet"] = dataframe["tweet"].apply(taggin_numbers)
         print (dataframe["tweet"])
 
+def trigrams(text):
+        pass
 
 
-
-sentimixInternetTagging(open_data(CORPUS))
+print(open_data_Horrible_TSV(TRAIN))
