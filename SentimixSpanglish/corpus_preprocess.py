@@ -1,10 +1,11 @@
 import pandas as pd
 import json
+from ast import literal_eval
 from internet_taggin import internet_element_taggin, taggin_numbers
+from parallelize import parallelize_df, parallelize_df_np
 
-
-TRIAL = "./data/spanglish_trial_release.txt"
-TRAIN = "./data/train.tsv"
+TRIAL = "./data/trail_conll_spanglish.txt"
+TRAIN = "./data/train_conll_spanglish.txt"
 
 def open_data_JsonPerLine(data_file):
 	"""
@@ -29,43 +30,92 @@ def open_data_JsonPerLine(data_file):
 	dataframe = pd.DataFrame(list_data)
 	return(dataframe)
 
-def open_data_Horrible_TSV(horrible_data_file):
+def HorribleConLL2df(horrible_data_file):
+        """
+        Takes "supposed conll file and returns a dataframe"
+
+        Parameters:
+        corpus (pd.Series): A series whith ordered list of token in each row
+
+        Returns:
+        pd.Dataframe:
+        """
+
         dataframe = pd.read_csv(horrible_data_file,
                                 encoding="utf_8",
-                                sep="\t",
+                                sep=r"[\s]",
                                 header=None,
-                                names=["words","lang"])
-        dataframe = dataframe.fillna(value = "_____")
+                                names=["words","lang","sentiment"])
         lastrow  = len(dataframe)-1
-        positives = dataframe[dataframe['lang'] == "positive"]
-        negatives = dataframe[dataframe['lang'] == "negative"]
-        neutral = dataframe[dataframe['lang'] == "neutral"]
-        concatena = pd.concat([positives,negatives, neutral])
-        phrase_limits = concatena.sort_index().index.tolist()
-        start = 0
-        phrase_df = pd.DataFrame(columns=["tweet","languages", "sentiment"])
-        for limit in phrase_limits:
-                sentiment = dataframe.iloc[limit]["lang"]
-                print (dataframe.iloc[start:limit])
-                sentence = "".join([dataframe.iloc[start:limit]["words"]])
-        return sentence
+        indexes = dataframe["lang"].apply(str.isdigit)
+        index_list = indexes[indexes].index.tolist()
+        index_list.append(lastrow)
+        phrase_df = pd.DataFrame(columns=["tweetid", "tweet", "lang", "length", "sentiment"])
+        phrase_df = phrase_df.set_index('tweetid')
+        for counter, limit in enumerate(index_list):
+                if counter < len(index_list)-1:
+                        tweetid = dataframe.iloc[limit]["lang"]
+                        sentiment = dataframe.iloc[limit]["sentiment"].strip()
+                        tokenlist = [x for x in dataframe.iloc[limit+1:index_list[counter+1]]["words"]]
+                        metalist = [x for x in dataframe.iloc[limit+1:index_list[counter+1]]["lang"]]
+                        print(tokenlist)
+                phrase_df.loc[int(tweetid)] = [tokenlist, metalist, len(tokenlist),sentiment]
+        return phrase_df
 
-def sentimix_data_reorder(sentimix_dataframe):
-	"""
-	Reorder sentimix dataframe to easy vizualize
+def sentimix_vocab(corpus):
+        """
+        Takes a tokenized corpus and returns a vocabulary with frecuences
 
-	Parameters:
-	sentimix_dataframe (pd.DataFrame): Original df
+        Parameters:
+        corpus (pd.Series): A series whith ordered list of token in each row
 
-	Returns:
-	pd.Dataframe: Ordered dataframe
-	"""
-	sentimix_dataframe.set_index("tweetid", inplace= True)
-	sentimix_dataframe = sentimix_dataframe[["tweet",
-											 "tokens",
-											 "langid",
-											 "sentiment"]]
-	return(sentimix_dataframe)
+        Returns:
+        pd.Dataframe:
+        """
+        vocab = []
+        for phrase in corpus["tweet"].items():
+                ph = list(map(lambda x: internet_element_taggin(x), phrase[1]))
+                ph = list(map(lambda x: taggin_numbers(x), ph))
+                vocab = vocab + ph
+        return vocab
+
+def sentimix_freqdf(corpus, normalize="Off"):
+        total_vocab = sentimix_vocab(corpus)
+        positive_vocab = sentimix_vocab(corpus[corpus['sentiment']=='positive'])
+        negative_vocab = sentimix_vocab(corpus[corpus['sentiment']=='negative'])
+        neutral_vocab = sentimix_vocab(corpus[corpus['sentiment']=='neutral'])
+        if normalize == "lower":
+                total_vocab = list(map(lambda x: x.lower(), total_vocab))
+                positive_vocab = list(map(lambda x: x.lower(), positive_vocab))
+                negative_vocab = list(map(lambda x: x.lower(), negative_vocab))
+                neutral_vocab = list(map(lambda x: x.lower(), neutral_vocab))
+        set_total_vocab = set(total_vocab)
+        set_positive_vocab = set(positive_vocab)
+        set_negative_vocab = set(negative_vocab)
+        set_neutral_vocab = set(neutral_vocab)
+        freqdf = pd.DataFrame(columns=["widx",
+                                       "word",
+                                       "pos_freq",
+                                       "neg_freq",
+                                       "neu_freq",
+                                       "freq",
+                                       "total_idf",
+                                       "pos_tdf",
+                                       "neg_tdf",
+                                       "neu_tdf"])
+        freqdf = freqdf.set_index(['widx'])
+        for counter, word in enumerate(set_total_vocab):
+                freqdf.loc[counter] = [word,
+                                       positive_vocab.count(word),
+                                       negative_vocab.count(word),
+                                       neutral_vocab.count(word),
+                                       total_vocab.count(word)]
+        max_pos_freq = freqdf.pos_freq.max()
+        max_neg_freq = freqdf.neg_freq.max()
+        max_neu_freq = freqdf.neu_freq.max()
+        max_freq = freqdf.freq.max()
+
+        return freqdf
 
 
 def corpus2tsv(dataframe, path, filename):
@@ -77,7 +127,6 @@ def corpus2tsv(dataframe, path, filename):
 	path (str): path to file
 	filename(str): filename
 	"""
-
 	dataframe.to_csv(path+filename, encoding="utf-8", sep='\t')
 
 def sentimixInternetTagging(dataframe):
@@ -95,8 +144,53 @@ def sentimixInternetTagging(dataframe):
         dataframe["tweet"] = dataframe["tweet"].apply(taggin_numbers)
         print (dataframe["tweet"])
 
-def trigrams(text):
-        pass
+def get_position(ls, element):
+        #print("···············································")
+        #print(ls)
+        ##print(element)
+        #print("···············································")
+        positions = [i for i, x in enumerate(ls) if x == element]
+        if positions:
+                print("--------------------------------")
+                print(element)
+                print(ls)
+                print(positions)
+                print("-------------------------------\n\n")
+        return positions
+
+def sintagmatrix(corpus, vocab):
+        sintag_mat = pd.DataFrame(columns = ["sidx"]+list(vocab.word))
+        sintag_mat = sintag_mat.set_index("sidx")
+        for sentence in corpus.iterrows():
+                new_row = [get_position(sentence[1].tweet,x) for x in list(sintag_mat.columns)]
+                sintag_mat.append(new_row)
+        return sintag_mat
 
 
-print(open_data_Horrible_TSV(TRAIN))
+
+
+        """
+        for sentence in corpus.items():
+                print("#################################")
+                print(sentence[0].tweet, "s")
+                #sintag_mat.loc[int(sentence["tweetid"])] = [list(vocab.word)]
+        print (sintag_mat)
+        """
+
+corpus = pd.read_csv("data/corpus.tsv",
+                     sep="\t",
+                     encoding="utf-8",
+                     index_col="tweetid",
+                     converters={"tweet":literal_eval})
+
+#corpus = HorribleConLL2df(TRAIN)
+#corpus2tsv(corpus, "data/", "corpus.tsv")
+#freqdf = parallelize_df(corpus, 60, sentimix_freqdf).groupby(['word']).sum()
+
+freqdf =  pd.read_csv("data/freq.tsv",
+                     sep="\t",
+                     encoding="utf-8")
+#print(freqdf.head())
+#corpus2tsv(freqdf, "data/", "freq.tsv")
+
+corpus2tsv(sintagmatrix(corpus, freqdf), "data/", "sintagmatrix.tsv")

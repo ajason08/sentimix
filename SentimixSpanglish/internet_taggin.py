@@ -13,7 +13,7 @@ UpperCamelCase = re.compile(r'\s([A-Z][a-z])*\s')
 lowerCamelCase = re.compile(r'\s([A-Z][a-z])*\s')
 
 
-def internet_element_taggin(text, preserve_con=False):
+def internet_element_taggin(text, preserve_con="NotInLinks"):
         """
         Detect and tagg common tweet elements: links, rt, hastag, pics.
 
@@ -23,20 +23,24 @@ def internet_element_taggin(text, preserve_con=False):
         Return
         str : tagged text
         """
-        if preserve_con:
+        if preserve_con == True:
+                print(text)
                 # Its necesary to detect RT first
                 tagged_text = re.sub(RT, r"<RT=\1>", text)
                 # Now we can catch ats adn hastags:
                 tagged_text = re.sub(AT, r"<AT=\1>", tagged_text)
                 tagged_text = re.sub(HT, r"<HT=\1>", tagged_text)
                 # Links
-                tagged_text = re.sub(LI, r"<LINK=\1>", tagged_text)
-        else:
+                tagged_text = re.sub(LI, r"<LINK=\1>", tagged_tex)
+        elif preserve_con == "NotInLinks":
                 # Its necesary to detect RT first
-                tagged_text = re.sub(RT, r"<RT>", text)
+                tagged_text = re.sub(RT, r"<RT=\1>", text)
+                if RT.fullmatch(text):
+                        print(text)
+                        print(tagged_text)
                 # Now we can catch ats adn hastags:
-                tagged_text = re.sub(AT, r"<AT>", tagged_text)
-                tagged_text = re.sub(HT, r"<HT>", tagged_text)
+                tagged_text = re.sub(AT, r"<AT=\1>", tagged_text)
+                tagged_text = re.sub(HT, r"<HT=\1>", tagged_text)
                 # Links
                 tagged_text = re.sub(LI, r"<LINK>", tagged_text)
         return tagged_text
