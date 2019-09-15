@@ -1,11 +1,16 @@
 import pandas as pd
 import json
 from ast import literal_eval
+import numpy as np
+import multiprocessing as mp
+from functools import partial
 from internet_taggin import internet_element_taggin, taggin_numbers
 from parallelize import parallelize_df, parallelize_df_np
+import csv
 
 TRIAL = "./data/trail_conll_spanglish.txt"
 TRAIN = "./data/train_conll_spanglish.txt"
+
 
 def open_data_JsonPerLine(data_file):
 	"""
@@ -159,23 +164,29 @@ def get_position(ls, element):
         return positions
 
 def sintagmatrix(corpus, vocab):
-        sintag_mat = pd.DataFrame(columns = ["sidx"]+list(vocab.word))
+        sintag_mat = pd.DataFrame(columns = ["sidx"]+vocab)
         sintag_mat = sintag_mat.set_index("sidx")
+        with open("data/sintagmatrix.tsv", 'a') as f:
+            sintag_mat.to_csv(f, encoding="utf-8", sep='\t')
         for sentence in corpus.iterrows():
                 new_row = [get_position(sentence[1].tweet,x) for x in list(sintag_mat.columns)]
-                sintag_mat.append(new_row)
-        return sintag_mat
+                with open("data/sintagmatrix.tsv", 'a') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(new_row)
+                f.close()
 
 
 
 
-        """
-        for sentence in corpus.items():
-                print("#################################")
-                print(sentence[0].tweet, "s")
-                #sintag_mat.loc[int(sentence["tweetid"])] = [list(vocab.word)]
-        print (sintag_mat)
-        """
+def parallelize_sintagmatrix(df, secondarg):
+    df_split = np.array_split(df, 100)
+    pool = mp.Pool(mp.cpu_count()-2)
+    new_func = partial(sintagmatrix, vocab = secondarg)
+    df = pd.concat(pool.map(new_func,df_split))
+    pool.close()
+    pool.join()
+    return df
+
 
 corpus = pd.read_csv("data/corpus.tsv",
                      sep="\t",
@@ -190,7 +201,12 @@ corpus = pd.read_csv("data/corpus.tsv",
 freqdf =  pd.read_csv("data/freq.tsv",
                      sep="\t",
                      encoding="utf-8")
+vocab = list(freqdf.word)
+print(vocab)
 #print(freqdf.head())
 #corpus2tsv(freqdf, "data/", "freq.tsv")
 
-corpus2tsv(sintagmatrix(corpus, freqdf), "data/", "sintagmatrix.tsv")
+parallelize_sintagmatrix(corpus, vocab)
+
+
+#corpus2tsv(sintagmatrix(corpus, freqdf), "data/", "sintagmatrix.tsv")
