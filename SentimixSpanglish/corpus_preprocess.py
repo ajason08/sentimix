@@ -150,42 +150,40 @@ def sentimixInternetTagging(dataframe):
         print (dataframe["tweet"])
 
 def get_position(ls, element):
-        #print("···············································")
-        #print(ls)
-        ##print(element)
-        #print("···············································")
         positions = [i for i, x in enumerate(ls) if x == element]
-        if positions:
+        """if positions:
                 print("--------------------------------")
                 print(element)
                 print(ls)
                 print(positions)
-                print("-------------------------------\n\n")
+                print("-------------------------------\n\n")"""
         return positions
 
 def sintagmatrix(corpus, vocab):
         sintag_mat = pd.DataFrame(columns = ["sidx"]+vocab)
         sintag_mat = sintag_mat.set_index("sidx")
-        with open("data/sintagmatrix.tsv", 'a') as f:
-            sintag_mat.to_csv(f, encoding="utf-8", sep='\t')
         for sentence in corpus.iterrows():
-                new_row = [get_position(sentence[1].tweet,x) for x in list(sintag_mat.columns)]
-                with open("data/sintagmatrix.tsv", 'a') as f:
-                        writer = csv.writer(f)
+                print(sentence)
+                row = [get_position(sentence[1].tweet,x) for x in list(sintag_mat.columns)]
+                new_row = [sentence[0]] + row
+                with open("data/sintagmatrix.tsv", 'a', encoding="utf-8", newline='') as f:
+                        writer = csv.writer(f,  delimiter='\t')
                         writer.writerow(new_row)
                 f.close()
 
 
-
-
 def parallelize_sintagmatrix(df, secondarg):
-    df_split = np.array_split(df, 100)
-    pool = mp.Pool(mp.cpu_count()-2)
-    new_func = partial(sintagmatrix, vocab = secondarg)
-    df = pd.concat(pool.map(new_func,df_split))
-    pool.close()
-    pool.join()
-    return df
+        sintag_mat = pd.DataFrame(columns = ["sidx"]+vocab)
+        sintag_mat = sintag_mat.set_index("sidx")
+        with open("data/sintagmatrix.tsv", 'w') as f:
+                sintag_mat.to_csv(f, encoding="utf-8", sep='\t')
+        df_split = np.array_split(df, 100)
+        pool = mp.Pool(mp.cpu_count()-1)
+        new_func = partial(sintagmatrix, vocab = secondarg)
+        df = pd.concat(pool.map(new_func,df_split))
+        pool.close()
+        pool.join()
+
 
 
 corpus = pd.read_csv("data/corpus.tsv",
@@ -202,7 +200,7 @@ freqdf =  pd.read_csv("data/freq.tsv",
                      sep="\t",
                      encoding="utf-8")
 vocab = list(freqdf.word)
-print(vocab)
+#print(vocab)
 #print(freqdf.head())
 #corpus2tsv(freqdf, "data/", "freq.tsv")
 
