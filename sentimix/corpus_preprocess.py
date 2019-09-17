@@ -1,49 +1,22 @@
 import pandas as pd
-import json
-from ast import literal_eval
 import numpy as np
 import multiprocessing as mp
 from functools import partial
-from internet_taggin import internet_element_taggin, taggin_numbers
-from parallelize import parallelize_df, parallelize_df_np
 import csv
 
-TRIAL = "./data/trail_conll_spanglish.txt"
-TRAIN = "./data/train_conll_spanglish.txt"
+import taggin as tg
+from parallelize import parallelize_df, parallelize_df_np
 
-
-def open_data_JsonPerLine(data_file):
-	"""
-	Read txt data file whit one JSON object by line.
-
-	Open a text file contains one JSON object by line
-	without any separator. Put each line in a list, put
-	the list in a Pandas dataframe , and return this
-	dataframe.
-
-	Parameters:
-	data_file (file) = Text file whit one JSON object by line.
-
-	Returns:
-	pd.DataFrame: Pandas datagrame with all objects of the txt file
-
-	"""
-	list_data = []
-	with open(data_file, "r") as read_file:
-		for line in read_file:
-			list_data.append(json.loads(line))
-	dataframe = pd.DataFrame(list_data)
-	return(dataframe)
 
 def HorribleConLL2df(horrible_data_file):
         """
         Takes "supposed conll file and returns a dataframe"
 
         Parameters:
-        corpus (pd.Series): A series whith ordered list of token in each row
+        horrible_data_file: Supossed conll file
 
         Returns:
-        pd.Dataframe:
+        pd.Dataframe: Dataframe whith list of tokens and languages
         """
 
         dataframe = pd.read_csv(horrible_data_file,
@@ -55,7 +28,11 @@ def HorribleConLL2df(horrible_data_file):
         indexes = dataframe["lang"].apply(str.isdigit)
         index_list = indexes[indexes].index.tolist()
         index_list.append(lastrow)
-        phrase_df = pd.DataFrame(columns=["tweetid", "tweet", "lang", "length", "sentiment"])
+        phrase_df = pd.DataFrame(columns=["tweetid",
+                                          "tweet",
+                                          "lang",
+                                          "length",
+                                          "sentiment"])
         phrase_df = phrase_df.set_index('tweetid')
         for counter, limit in enumerate(index_list):
                 if counter < len(index_list)-1:
@@ -66,6 +43,32 @@ def HorribleConLL2df(horrible_data_file):
                         print(tokenlist)
                 phrase_df.loc[int(tweetid)] = [tokenlist, metalist, len(tokenlist),sentiment]
         return phrase_df
+
+def lower_corpus(corpus):
+        """
+        Takes a corpus DataFrame whith one colum called "tweet" and
+        returns the same dataframe whit each token of the "tweet" colum
+        in lower case.
+        """
+        lower_cor = corpus
+        corpus = None
+        lower_cor["tweet"] =  lower_cor["tweet"].apply(lambda x: " ".join(x).lower().split())
+        return lower_cor
+
+def tagged_corpus(corpus):
+        """
+        Takes a corpus DataFrame whith one colum called "tweet" and
+        returns the same dataframe whit each token of the "tweet" colum
+        in lower case.
+        """
+        tagged_cor = corpus
+        corpus = None
+        tagged_cor["tweet"] =  tagged_cor["tweet"].apply(lambda x: tg.taggin_prices(" ".join(x)).split())
+        tagged_cor["tweet"] =  tagged_cor["tweet"].apply(lambda x: tg.taggin_numbers(" ".join(x)).split())
+        tagged_cor["tweet"] =  tagged_cor["tweet"].apply(lambda x: tg.internet_element_taggin(" ".join(x)).split())
+        return tagged_cor
+
+
 
 def sentimix_vocab(corpus):
         """
@@ -78,10 +81,10 @@ def sentimix_vocab(corpus):
         pd.Dataframe:
         """
         vocab = []
-        for phrase in corpus["tweet"].items():
-                ph = list(map(lambda x: internet_element_taggin(x), phrase[1]))
-                ph = list(map(lambda x: taggin_numbers(x), ph))
-                vocab = vocab + ph
+        for sentence in corpus.items():
+                sent = list(map(lambda x: internet_element_taggin(x), sentence[1]))
+                sent = list(map(lambda x: taggin_numbers(x), sentence))
+                vocab = vocab + sent
         return vocab
 
 def sentimix_freqdf(corpus, normalize="Off"):
@@ -124,15 +127,16 @@ def sentimix_freqdf(corpus, normalize="Off"):
 
 
 def corpus2tsv(dataframe, path, filename):
-	"""
-	Takes an txt JSON object per line file and make a tsv file with the same data.
+        """
+        Takes an txt JSON object per line file and make a tsv file with the same data.
 
-	Parameters:
-	dataframe (pd.DataFrame): Dataframe to dump into tsv file
-	path (str): path to file
-	filename(str): filename
-	"""
-	dataframe.to_csv(path+filename, encoding="utf-8", sep='\t')
+        Parameters:
+        dataframe (pd.DataFrame): Dataframe to dump into tsv file
+        path (str): path to file
+        filename(str): filename
+        """
+
+        dataframe.to_csv(path+filename, encoding="utf-8", sep='\t')
 
 def sentimixInternetTagging(dataframe):
         """
@@ -183,28 +187,3 @@ def parallelize_sintagmatrix(df, secondarg):
         df = pd.concat(pool.map(new_func,df_split))
         pool.close()
         pool.join()
-
-
-
-corpus = pd.read_csv("data/corpus.tsv",
-                     sep="\t",
-                     encoding="utf-8",
-                     index_col="tweetid",
-                     converters={"tweet":literal_eval})
-
-#corpus = HorribleConLL2df(TRAIN)
-#corpus2tsv(corpus, "data/", "corpus.tsv")
-#freqdf = parallelize_df(corpus, 60, sentimix_freqdf).groupby(['word']).sum()
-
-freqdf =  pd.read_csv("data/freq.tsv",
-                     sep="\t",
-                     encoding="utf-8")
-vocab = list(freqdf.word)
-#print(vocab)
-#print(freqdf.head())
-#corpus2tsv(freqdf, "data/", "freq.tsv")
-
-parallelize_sintagmatrix(corpus, vocab)
-
-
-#corpus2tsv(sintagmatrix(corpus, freqdf), "data/", "sintagmatrix.tsv")
