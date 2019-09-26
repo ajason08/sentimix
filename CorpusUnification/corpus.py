@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 from itertools import groupby
 
 
@@ -57,30 +59,67 @@ class Document():
         bow_dataframe["MAX_RANK"] = bow_dataframe["RAW_COUNT"].rank(method="max", ascending=False)
         bow_dataframe["FIR_RANK"] = bow_dataframe["RAW_COUNT"].rank(method="first", ascending=False)
         bow_dataframe["DEN_RANK"] = bow_dataframe["RAW_COUNT"].rank(method="dense", ascending=False)
-        bow_dataframe = bow_dataframe.sort_values(by="FIR_RANK")
+
+        bow_dataframe["RANK_COUNT"] = bow_dataframe.groupby('DEN_RANK')['DEN_RANK'].transform('count')
+
         #parametros
         zipf_k = np.log(bow_dataframe["RAW_COUNT"].max())
         zipf_a = zipf_k/np.log(bow_dataframe["DEN_RANK"].max())
         #Zipf's values
         bow_dataframe["IdealZipF"] = -zipf_a*np.log(bow_dataframe["DEN_RANK"])+zipf_k
+        #Cuadratic Zipf
+        zipf_kk =  np.log(bow_dataframe["RAW_COUNT"].max())/2
+        a = 4*np.log(bow_dataframe["RAW_COUNT"].max())
+        b = -a
+        alpha1 = (b + np.sqrt(b*b+(4*b*zipf_kk)))
+        alpha2 = (b - np.sqrt(b*b+(4*b*zipf_kk)))
+        bow_dataframe["QuadraticZipf1"] =  np.square(-zipf_a*np.log(bow_dataframe["DEN_RANK"])+zipf_k)
+        bow_dataframe["QuadraticZipf2"] =  np.square((-alpha1*np.log(bow_dataframe["DEN_RANK"])+zipf_kk))
         bow_dataframe["ERR"] = bow_dataframe["LOG_NOR"] - bow_dataframe["IdealZipF"]
         bow_dataframe["ERR2"] = np.sqrt(bow_dataframe["ERR"])
         self.err2 = bow_dataframe["ERR2"].mean()
         return bow_dataframe
 
-    def zipflaw_graph(self,gapz=[0]):
-        dataset = self.tf_idf(gaps=gapz)[["LOG_NOR","IdealZipF","ERR","ERR2","DEN_RANK"]]
+    def zipflaw_graph(self, dim=3 ,gapz=[0]):
+
+
+        dataset = self.tf_idf(gaps=gapz)[["LOG_NOR","IdealZipF","QuadraticZipf1","QuadraticZipf2","DEN_RANK","RANK_COUNT"]]
+        x = np.log(np.array(dataset["DEN_RANK"]))
+        z_real = np.array(dataset["LOG_NOR"])
+        z_ideal = np.sqrt(np.array(dataset["IdealZipF"]))
+        z_err = np.array(dataset["QuadraticZipf1"])
+        z_err2= np.array(dataset["QuadraticZipf2"])
+        y = np.log(np.array(dataset["RANK_COUNT"]))
+
+
+        if dim==3:
+            mpl.rcParams['legend.fontsize'] = 10
+            fig = plt.figure()
+            ax = fig.gca(projection='3d')
+            err = np.array(dataset["ERR"])
+            err2= np.array(dataset["ERR2"])
+            ax.plot(x, y, z_real, label='Real')
+            ax.plot(x, y, z_ideal, label="IdealZipF")
+            ax.plot(x, y, z_err, label="Error")
+            ax.legend()
+            plt.show()
+
+        else:
+            plt.plot(x,z_real)
+            plt.plot(x,z_ideal)
+            plt.plot(x,z_err, label="kk1")
+            #plt.plot(x,z_err2, label="kk2")
+            plt.title("Zipf for {}\nStructure: {}\nError{}".format(self.name, gapz, self.err2))
+            plt.xlabel("log(Rank)")
+            plt.ylabel("log(Freq)")
+            plt.show()
+
+        """dataset = self.tf_idf(gaps=gapz)[["LOG_NOR","IdealZipF","ERR","ERR2","DEN_RANK"]]
         x = np.log(np.array(dataset["DEN_RANK"]))
         y = np.array(dataset["LOG_NOR"])
-        ideal = np.array(dataset["IdealZipF"])
-        err = np.array(dataset["ERR"])
-        err2= np.array(dataset["ERR2"])
-        plt.plot(x,y)
-        plt.plot(x,ideal)
-        plt.plot(x,err)
-        plt.plot(x,err2)
-        plt.ylabel(self.err2)
-        plt.show()
+
+
+        """
 
 class Collection():
     name = ""
