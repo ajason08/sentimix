@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import multiprocessing as mp
 from functools import partial
+from ast import literal_eval
 import csv
 
 import taggin as tg
@@ -24,8 +25,10 @@ def HorribleConLL2df(horrible_data_file):
                                 sep=r"[\s]",
                                 header=None,
                                 names=["words","lang","sentiment"])
+        dataframe = dataframe.astype("str")
         lastrow  = len(dataframe)-1
-        indexes = dataframe["lang"].apply(str.isdigit)
+        indexes = dataframe[dataframe["lang"].apply(lambda x: type(x).__name__=="str")==True]
+        indexes = indexes["lang"].apply(str.isdigit)
         index_list = indexes[indexes].index.tolist()
         index_list.append(lastrow)
         phrase_df = pd.DataFrame(columns=["tweetid",
@@ -87,16 +90,11 @@ def sentimix_vocab(corpus):
                 vocab = vocab + sent
         return vocab
 
-def sentimix_freqdf(corpus, normalize="Off"):
+def sentimix_freqdf(corpus):
         total_vocab = sentimix_vocab(corpus)
         positive_vocab = sentimix_vocab(corpus[corpus['sentiment']=='positive'])
         negative_vocab = sentimix_vocab(corpus[corpus['sentiment']=='negative'])
         neutral_vocab = sentimix_vocab(corpus[corpus['sentiment']=='neutral'])
-        if normalize == "lower":
-                total_vocab = list(map(lambda x: x.lower(), total_vocab))
-                positive_vocab = list(map(lambda x: x.lower(), positive_vocab))
-                negative_vocab = list(map(lambda x: x.lower(), negative_vocab))
-                neutral_vocab = list(map(lambda x: x.lower(), neutral_vocab))
         set_total_vocab = set(total_vocab)
         set_positive_vocab = set(positive_vocab)
         set_negative_vocab = set(negative_vocab)
@@ -187,3 +185,11 @@ def parallelize_sintagmatrix(df, secondarg):
         df = pd.concat(pool.map(new_func,df_split))
         pool.close()
         pool.join()
+
+
+def sintagmatrix_sentence_rebuild(sintagmatrix, sentence):
+        sintag_mat = pd.read_csv(sintagmatrix,
+                                 sep="\t",
+                                 encoding="utf_8",
+                                 converters={"tweet":literal_eval}).iloc[sentence]
+        return sintag_mat

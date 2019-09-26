@@ -28,7 +28,25 @@ TAGGED_TW_LOW_CORPUS = "low_tagged_tw_corpus.tsv"
 TAGGED_TW_LOW_FREQ = "low_tagged_tw_freq.tsv"
 TAGGED_TW_LOW_SINTAGMATRIX = "low_tagged_tw_sintagmatrix.tsv"
 
+VOCAB = "vocabulary.txt"
 
+
+cp.sintagmatrix_sentence_rebuild(SPANGLISH+SINTAGMATRIX, 1)
+
+
+"""
+corpus = cp.HorribleConLL2df(HINDINGLISH+TRAIN)
+cp.corpus2tsv(corpus, HINDINGLISH, CORPUS)
+
+
+low_corp = cp.lower_corpus(corpus)
+cp.corpus2tsv(low_corp, HINDINGLISH, LOW_CORPUS)
+
+tg_corp = cp.tagged_corpus(corpus)
+cp.corpus2tsv(tg_corp, HINDINGLISH, TAGGED_TW_CORPUS)
+
+tg_low = cp.tagged_corpus(low_corp)
+cp.corpus2tsv(tg_low, HINDINGLISH, TAGGED_TW_LOW_CORPUS)
 
 
 corpus = pd.read_csv(SPANGLISH+CORPUS,
@@ -38,15 +56,6 @@ corpus = pd.read_csv(SPANGLISH+CORPUS,
                      converters={"tweet":literal_eval})
 
 
-
-
-
-
-
-
-
-
-"""
 tg_corp = cp.tagged_corpus(corpus)
 cp.corpus2tsv(tg_corp,SPANGLISH,TAGGED_TW_CORPUS)
 
