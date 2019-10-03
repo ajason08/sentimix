@@ -98,6 +98,12 @@ class Document():
             print(frecuency)
             lengths.append(len(frecuency))
             print(lengths)
+        n  = len(lengths)
+        armonico = 0
+        for x in range(1,n+1):
+            armonico +=1/x
+        print(n,armonico,lengths)
+        return
 
 
 
