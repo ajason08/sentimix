@@ -1,352 +1,276 @@
 import pandas as pd
 import numpy as np
+from scipy.special import digamma
+from sklearn.linear_model import LinearRegression
+from sklearn import metrics
 import matplotlib as mpl
+import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
+
+
+def harmonic(x):
+    """
+    Returns the armonic number of x
+    If s is complex the result becomes complex.
+    """
+    return digamma(x + 1) + np.euler_gamma
+
+def harmonic_g1(c,n,m):
+    """
+    Return the armonic generalized  number
+    for parameters by a for cicle
+
+    Parameters:
+    c (int): add constant
+    n (int): sumatory count limit
+    m (float): add power
+    """
+    harm = 0
+    for k in range (1,n):
+        oldharm = harm
+        suma = c+k
+        potencia = suma**m
+        cociente = 1/potencia
+        harm += cociente
+        if format(oldharm, '.16g') == format(harm, '.16g'):
+            return harm
+    return harm
+
+def harmonic_g2(c,n,m):
+    return harmonic_g1(0,c+n,m)-harmonic_g1(0,c+1,m)
+
+def euler_aprox(x):
+    e = 0
+    for i in range(0, int(x)):
+        e += 1/np.math.factorial(i)
+    return e
+
+
+def zipf_type_of_rank_comparision_graph(zipf,
+                                        log = True,
+                                        list_of_types = ["AvgRank",
+                                                         "DenRank",
+                                                         "MinRank",
+                                                         "MaxRank",
+                                                         "FirRank"],
+                                        comparision_list=["Error", "Types", "Tokens"]):
+    data = zipf.freq_rank
+    zipf_model = zipf.zipf
+    number_of_types = len(list_of_types)
+
+    number_of_comparitions = len(comparision_list)
+
+    if log == False:
+        zipf_model = np.exp(zipf_model)
+        info = "Freq vs Rank"
+        x_label = "Rank"
+        zipf_ylabel = "Freq"
+    elif log == "Freq":
+        data["Freq"] = np.log(data["Freq"])
+        info = "ln(Freq) vs Rank"
+        x_label = "Rank"
+        zipf_ylabel = "ln(Freq)"
+    elif log == "Rank":
+        data[list_of_types] = np.log(data[list_of_types])
+        zipf_model = np.exp(zipf_model)
+        print(zipf_model)
+        info = "Freq vs ln(Rank)"
+        x_label = "ln(Rank)"
+        zipf_ylabel = "Freq"
+    else:
+        data = np.log(data)
+        info = "ln(Freq) vs ln(Rank)"
+        x_label = "ln(Rank)"
+        zipf_ylabel = "ln(Freq)"
+
+    y = data["Freq"]
+
+    y_lables = [zipf_ylabel]
+
+    if "Error" in comparision_list:
+        y_lables.append("Square error")
+    if "Types" in comparision_list:
+        y_lables.append("Types per rank")
+    if "Tokens" in comparision_list:
+        y_lables.append("Tokens per rank")
+
+
+    # Set the graph
+    fig, axs = plt.subplots(number_of_comparitions+1, number_of_types, sharex="col", sharey="row")
+    fig.suptitle("Zipf law in diferents ranks\n"+info)
+
+    for i in range (0, number_of_types):
+        x = data[list_of_types[i]]
+        comp = []
+        zipf_y = zipf_model[list_of_types[i]]
+        axs[0,i].plot(x,y)
+        axs[0,i].plot(x,zipf_y)
+        axs[0,i].set_title("{}".format(list_of_types[i]))
+        if "Error" in comparision_list:
+            error = np.array(zipf_model["SqrEr{}".format(list_of_types[i])])
+            comp.append(error)
+        if "Types" in comparision_list:
+            types = np.array(zipf_model["SqrEr{}".format(list_of_types[i])])
+            comp.append(types)
+        if "Tokens" in comparision_list:
+            tokens =np.array(zipf_model["SqrEr{}".format(list_of_types[i])])
+            comp.append(tokens)
+        for count, element in enumerate(comp,1):
+            axs[count,i].plot(x,element)
+
+    for ax in axs.flat:
+        ax.set(xlabel=x_label)
+
+    for ax, row in zip(axs[:,0], y_lables):
+        ax.set_ylabel(row)
+
+    # Hide x labels and tick labels for top plots and y ticks for right plots.
+    for ax in axs.flat:
+        ax.label_outer()
+
+    plt.show()
+
+
+
+
+
+
 class zipf():
+    freq_rank = pd.DataFrame()
+    zipf_k = {}
+    zipf_alpha = {}
+    #subranks_level = {"Avg":0,"Den":0, "Min":0, "Max":, "Fir":0}
+    errors = {}
 
-    def __init__(self, frequency_df):
-        self.freq_rank = frequency_df
-        print(self.freq_rank)
-        self.freq_rank["LogFreq"] = np.log(self.freq_rank["RawFreq"])
-        #self.freq_rank["DenseRank"] = self.freq_rank["RawFreq"].rank(method="dense", ascending=False)
-        self.freq_rank["LogDenseRank"] = np.log(self.freq_rank["DenseRank"])
+    def __init__(self, bow):
+        """
+        Takes a BOW of words of a text and build his Zipfian estructure.
 
-        # Maxima
-        self.max_freq = self.freq_rank["RawFreq"].max()
-        self.max_rank = self.freq_rank["DenseRank"].max()
-        self.e_aprox_by_max_rank = 0
-        for x in range (0, int(self.max_rank)):
-            self.e_aprox_by_max_rank += 1/np.math.factorial(x)
+        Params:
+        bow: A BOW of text in dict format which each token as keyword
+        """
 
+        # Takes  the BOW dict and transform it into pd_data
+        self.freq_rank["Freq"] =  pd.Series(bow)
+        # Order the frecuencies from high to low
+        self.freq_rank.sort_values(by="Freq", ascending = False)
+        # Dense rank frecuencies from high to low
+        self.freq_rank["AvgRank"] = self.freq_rank["Freq"].rank(method="average", ascending=False)
+        self.freq_rank["DenRank"] = self.freq_rank["Freq"].rank(method="dense", ascending=False)
+        self.freq_rank["MinRank"] = self.freq_rank["Freq"].rank(method="min", ascending=False)
+        self.freq_rank["MaxRank"] = self.freq_rank["Freq"].rank(method="max", ascending=False)
+        self.freq_rank["FirRank"] = self.freq_rank["Freq"].rank(method="first", ascending=False)
 
-        # Minima
-        self.min_freq = self.freq_rank["RawFreq"].min()
-        self.min_rank = self.freq_rank["DenseRank"].min()
+        # Minimum values
+        self.min_raw_freq = self.freq_rank["Freq"].min()
+        self.min_avr_rank = self.freq_rank["AvgRank"].min()
+        self.mix_max_rank = self.freq_rank["MaxRank"].min()
 
-        # Sum and probability
-        self.sum_freq = self.freq_rank["RawFreq"].sum()
-        self.freq_rank["Probabilty"] = self.freq_rank["RawFreq"]/self.sum_freq
+        # Maximum values
+        self.max_raw_freq = self.freq_rank["Freq"].max()
+        self.max_avg_rank = self.freq_rank["AvgRank"].max()
+        self.max_den_rank = self.freq_rank["DenRank"].max()
+        self.max_min_rank = self.freq_rank["MinRank"].max()
+        self.max_max_rank = self.freq_rank["MaxRank"].max()
+        self.max_fir_rank = self.freq_rank["FirRank"].max()
 
-        # Ideal Zipf Values
-        self.zipf_k = np.log(self.max_freq)
-        self.zipf_alpha =  self.zipf_k/np.log(self.max_rank)
-        self.freq_rank["Zipf"] = -self.zipf_alpha*np.log(self.freq_rank["DenseRank"])+self.zipf_k
-        self.freq_rank["ZipfSqError"] = np.square(self.freq_rank["LogFreq"]-self.freq_rank["Zipf"])
-        self.zipf_square_err =  self.freq_rank["ZipfSqError"].mean()
+        # Sums
+        self.total_tokens = self.freq_rank["Freq"].sum()
+        self.sum_avg_rank = self.freq_rank["AvgRank"].sum()
+        self.sum_den_rank = self.freq_rank["DenRank"].sum()
+        self.sum_min_rank = self.freq_rank["MinRank"].sum()
+        self.sum_max_rank = self.freq_rank["MaxRank"].sum()
+        self.sum_fir_rank = self.freq_rank["FirRank"].sum()
 
-        # My model values (assuming e)
-        self.e_k = np.power(self.zipf_k,np.e)
-        self.e_alpha = self.e_k/np.log(self.max_rank)
-        self.freq_rank["AsumingE"] = np.power(-self.e_alpha*np.log(self.freq_rank["DenseRank"])+self.e_k,1/np.e)
-        self.freq_rank["AsumingSqError"] = np.square(self.freq_rank["LogFreq"]-self.freq_rank["AsumingE"])
-        self.assuminge_square_err =  self.freq_rank["AsumingSqError"].mean()
+        # count
+        self.total_types = self.freq_rank.shape[0]
 
-        # My model values (aproximing e by number of reranks):
-        self.subrank_stabilization()
-        self.e_aprox_k_subranks = np.power(self.zipf_k,self.e_aprox_by_subrankstabilization)
-        self.e_aprox_alpha_subranks = self.e_aprox_k_subranks/np.log(self.max_rank)
-        self.freq_rank["AproxEbySubranks"] = np.power(-self.e_aprox_alpha_subranks*np.log(self.freq_rank["DenseRank"])+self.e_aprox_k_subranks,1/self.e_aprox_by_subrankstabilization)
-        self.freq_rank["AproxBySubranksSqError"] = np.square(self.freq_rank["LogFreq"]-self.freq_rank["AproxEbySubranks"])
-        self.aprox_sr_square_err = self.freq_rank["AproxBySubranksSqError"].mean()
+        self.zipf_structure()
 
-        # My model values (aproximing e by number of ranks)
-        self.e_aprox_k_ranks = np.power(self.zipf_k,self.e_aprox_by_max_rank)
-        self.e_aprox_alpha_ranks = self.e_aprox_k_ranks/np.log(self.max_rank)
-        self.freq_rank["AproxEbyRanks"] = np.power(-self.e_aprox_alpha_ranks*np.log(self.freq_rank["DenseRank"])+self.e_aprox_k_ranks,1/self.e_aprox_by_max_rank)
-        self.freq_rank["AproxByRanksSqError"] = np.square(self.freq_rank["LogFreq"]-self.freq_rank["AproxEbyRanks"])
-        self.aprox_mr_square_err = self.freq_rank["AproxByRanksSqError"].mean()
+        self.avg_nest, self.sub_avgrank = self.fractal_str("AvgRank")
+        self.den_nest, self.sub_denrank = self.fractal_str("DenRank")
+        self.min_nest, self.sub_minrank = self.fractal_str("MinRank")
+        self.max_nest, self.sub_maxrank = self.fractal_str("MaxRank")
+        self.fir_nest, self.sub_firrank = self.fractal_str("FirRank")
 
+        self.harm_avg = harmonic(self.avg_nest)
+        self.harm_den = harmonic(self.den_nest)
+        self.harm_min = harmonic(self.min_nest)
+        self.harm_max = harmonic(self.max_nest)
+        self.harm_fir = harmonic(self.fir_nest)
 
-        # Modelo con simplificacion de la idea de Mandelbrot
-        # ln(f) = alpha*ln(r+m)^x
-        self.mandel_power = np.e
-        self.mandel_q = (np.power(self.max_freq,1/self.mandel_power)-self.max_rank)/(1-np.power(self.max_freq,1/self.mandel_power))
-        self.freq_rank["Harmonic"] = self.freq_rank["DenseRank"].apply(self.harmonic)
-        self.freq_rank["e"] = self.freq_rank["DenseRank"].apply(self.euler)
+        self.e_avg = euler_aprox(self.avg_nest)
+        self.e_den = euler_aprox(self.den_nest)
+        self.e_min = euler_aprox(self.min_nest)
+        self.e_max = euler_aprox(self.max_nest)
+        self.e_fir = euler_aprox(self.fir_nest)
 
-        print(">>>>>>>>>>>>>>>>>>>>>>>")
-        print(self.freq_rank[["DenseRank","Harmonic", "e"]])
-        print("<<<<<<<<<<<<<<<<<<<<<<<<<")
+    def fractal_str(self, rank):
+        method_dict = {"AvgRank":"average","DenRank":"dense","MinRank":"min","MaxRank":"max","FirRank":"first"}
+        element = self.freq_rank[["Freq",rank]]
+        element = element.rename(columns={"Freq": "F0", rank: "R0"})
+        element["F1"] = element.groupby("R0")["R0"].transform("count")
+        element["AF1"] = element.groupby(["R0"])["F0"].transform("sum")
+        element["R1"] = element["F1"].rank(method=method_dict[rank], ascending=False)
 
-        self.freq_rank["MyMandel"] = np.log(self.sum_freq/np.power(self.freq_rank["DenseRank"]+self.mandel_q,self.freq_rank["e"])*np.array(self.freq_rank["Harmonic"]))
-        self.freq_rank["MyMandelSqErr"] = np.square(self.freq_rank["LogFreq"]-self.freq_rank["MyMandel"])
-        self.mymandel_square_err = self.freq_rank["MyMandel"].mean()
+        str_level = 1
+        finish = False
+        while finish == False:
+            element = element
+            str_level+=1
+            freq_key = "F{}".format(str_level)
+            rank_key = "R{}".format(str_level)
+            afre_key = "AF{}".format(str_level)
+            prev_freq_key = "F{}".format(str_level-1)
+            prev_rank_key = "R{}".format(str_level-1)
+            prev_afre_key = "AF{}".format(str_level-1)
+            element[freq_key] = element.groupby(prev_rank_key)[prev_rank_key].transform("count")
+            element[afre_key] = element.groupby([prev_rank_key])["F0"].transform("sum")
+            element[rank_key] = element[freq_key].rank(method=method_dict[rank], ascending=False)
+            if element[freq_key].equals(element[prev_freq_key]):
+                finish = True
 
-    def harmonic(self, x):
-        har = 0
-        for x in range (1, int(x)):
-            har +=  1/np.power((x + self.mandel_q),self.mandel_power)
-        return har
+        return str_level, element
 
-    def euler(self, x):
-        e = 0
-        for x in range(0, int(x)):
-            e += 1/np.math.factorial(x)
-        return e
 
     def subrank_stabilization(self):
-        """self.stabilization = self.freq_rank[["RawFreq", "DenseRank"]]
-        print (self.stabilization)"""
 
         """ This ignore the value of the original frequencies, only counts subrank freq"""
-        self.stabilization = self.freq_rank[["RawFreq","DenseRank"]]
+        self.stabilization = self.freq_rank[["Freq","DenRank"]]
         self.lengths = [len(self.stabilization)]
         while len(self.stabilization) != 1:
-            self.stabilization = self.stabilization.groupby("DenseRank").count()
+            self.stabilization = self.stabilization.groupby("DenRank").count()
             self.stabilization.index.name=""
-            self.stabilization["DenseRank"] = self.stabilization["RawFreq"].rank(method="dense", ascending=False)
-
+            self.stabilization["DenRank"] = self.stabilization["Freq"].rank(method="dense", ascending=False)
             self.lengths.append(len(self.stabilization))
-            print(self.stabilization)
-            print(self.lengths)
+            """print(self.stabilization)
+            print(self.lengths)"""
         self.n = len(self.lengths)-2
         self.e_aprox_by_subrankstabilization = 0
         for x in range (0, self.n):
             self.e_aprox_by_subrankstabilization += 1/np.math.factorial(x)
-    """
-    def subrank_stabilization(self):
-         This fuctions takes in acount original frecuencies in reranks
-        pass"""
-
-
-    def power_proof(self, power):
-        self.power = power
-        self.power_k = np.power(self.zipf_k,self.power)
-        self.power_alpha = self.power_k/np.log(self.max_rank)
-        self.freq_rank["Power"] = np.power(-self.power_alpha*np.log(self.freq_rank["DenseRank"])+self.power_k ,1/self.power)
-        self.freq_rank["PowerError"] = self.freq_rank["LogFreq"]-self.freq_rank["Power"]
-        self.power_square_err =  np.square(self.freq_rank["PowerError"]).mean()
-
-
-    def rankfreq_graph(self,  euler = False, aprox_sr = False, aprox_mr=False ,power_rank=False, power = False):
-        x = np.array(self.freq_rank["DenseRank"])
-        z = np.array(self.freq_rank["RawFreq"])
-        z_zipf = np.exp(np.array(self.freq_rank["Zipf"]))
-
-        #mpl.rcParams["leyend.fontsize"] = 10
-        print(x,z)
-        mpl.pyplot.plot(x,z)
-        mpl.pyplot.plot(x,z_zipf)
-        legends = ["Data", "Zifp\n Error:{}".format(self.zipf_square_err)]
-
-        if euler:
-            z_euler = np.exp(np.array(self.freq_rank["AsumingE"]))
-            mpl.pyplot.plot(x,z_euler, )
-            legends.append("Power:e\n Error:{}".format(self.assuminge_square_err))
-
-        if aprox_sr:
-            z_aprox = np.exp(np.array(self.freq_rank["AproxEbySubranks"]))
-            mpl.pyplot.plot(x,z_aprox)
-            legends.append("Power: Aproximacion de e a n=maximo subrank ({})\n Error: {}".format(self.n, self.aprox_sr_square_err))
-
-        if aprox_mr:
-            z_aprox = np.exp(np.array(self.freq_rank["AproxEbyRanks"]))
-            mpl.pyplot.plot(x,z_aprox)
-            legends.append("Power: Aproximacion de e a n=maximo rank ({})\n Error: {}".format(self.max_rank, self.aprox_mr_square_err
-            ))
-
-
-        """if mymandel:
-            z_mymandel = np.array(self.freq_rank["MyMandel"])
-            mpl.pyplot.plot(x,z_mymandel)
-            legends.append("MyMandel")"""
-
-        if power:
-            self.power_proof(power)
-            z_power = np.exp(np.array(self.freq_rank["Power"]))
-            mpl.pyplot.plot(x,z_power)
-            legends.append("Power:{}".format(power))
-
-        mpl.pyplot.legend(legends)
-        mpl.pyplot.xlabel("Rank")
-        mpl.pyplot.ylabel("Freq")
-        mpl.pyplot.title("Freq vs Rank")
-        mpl.pyplot.show()
-
-    def rankloggraph(self,  euler = False, aprox_sr = False, aprox_mr=False ,power_rank=False, power = False):
-
-        x = np.log(np.array(self.freq_rank["DenseRank"]))
-        z = np.array(self.freq_rank["RawFreq"])
-        z_zipf = np.exp(np.array(self.freq_rank["Zipf"]))
-
-        #mpl.rcParams["leyend.fontsize"] = 10
-
-        mpl.pyplot.plot(x,z)
-        mpl.pyplot.plot(x,z_zipf)
-        legends = ["Data", "Zifp\n Error:{}".format(self.zipf_square_err)]
-
-        if euler:
-            z_euler = np.exp(np.array(self.freq_rank["AsumingE"]))
-            mpl.pyplot.plot(x,z_euler, linestyle=":" )
-            legends.append("Power:e\n Error:{}".format(self.assuminge_square_err))
-
-        if aprox_sr:
-            z_aprox = np.exp(np.array(self.freq_rank["AproxEbySubranks"]))
-            mpl.pyplot.plot(x,z_aprox)
-            legends.append("Power: Aproximacion de e a n=maximo subrank ({})\n Error: {}".format(self.n, self.aprox_sr_square_err))
-
-        if aprox_mr:
-            z_aprox = np.exp(np.array(self.freq_rank["AproxEbyRanks"]))
-            mpl.pyplot.plot(x,z_aprox)
-            legends.append("Power: Aproximacion de e a n=maximo rank ({})\n Error: {}".format(self.max_rank, self.aprox_mr_square_err
-            ))
-
-
-        """if mymandel:
-            z_mymandel = np.array(self.freq_rank["MyMandel"])
-            mpl.pyplot.plot(x,z_mymandel)
-            legends.append("MyMandel")"""
-
-        if power:
-            self.power_proof(power)
-            z_power = np.exp(np.array(self.freq_rank["Power"]))
-            mpl.pyplot.plot(x,z_power)
-            legends.append("Power:{}".format(power))
-
-        mpl.pyplot.legend(legends)
-        mpl.pyplot.xlabel("Ln(Rank)")
-        mpl.pyplot.ylabel("Freq")
-        mpl.pyplot.title("Freq vs ln(Rank)")
-        mpl.pyplot.show()
-
-    def freqloggraph(self,  euler = False, aprox_sr = False, aprox_mr=False ,power_rank=False, power = False):
-
-        x = np.array(self.freq_rank["DenseRank"])
-        z = np.array(self.freq_rank["LogFreq"])
-        z_zipf = np.array(self.freq_rank["Zipf"])
-
-        #mpl.rcParams["leyend.fontsize"] = 10
-
-        mpl.pyplot.plot(x,z)
-        mpl.pyplot.plot(x,z_zipf)
-        legends = ["Data", "Zifp\n Error:{}".format(self.zipf_square_err)]
-
-        if euler:
-            z_euler = np.array(self.freq_rank["AsumingE"])
-            mpl.pyplot.plot(x,z_euler)
-            legends.append("Power:e\n Error:{}".format(self.assuminge_square_err))
-
-        if aprox_sr:
-            z_aprox = np.array(self.freq_rank["AproxEbySubranks"])
-            mpl.pyplot.plot(x,z_aprox)
-            legends.append("Power: Aproximacion de e a n=maximo subrank ({})\n Error: {}".format(self.n, self.aprox_sr_square_err))
-
-        if aprox_mr:
-            z_aprox = np.array(self.freq_rank["AproxEbyRanks"])
-            mpl.pyplot.plot(x,z_aprox)
-            legends.append("Power: Aproximacion de e a n=maximo rank ({})\n Error: {}".format(self.max_rank, self.aprox_mr_square_err
-            ))
-
-
-        """if mymandel:
-            z_mymandel = np.array(self.freq_rank["MyMandel"])
-            mpl.pyplot.plot(x,z_mymandel)
-            legends.append("MyMandel")"""
-
-        if power:
-            self.power_proof(power)
-            z_power = np.array(self.freq_rank["Power"])
-            mpl.pyplot.plot(x,z_power)
-            legends.append("Power:{}".format(power))
-
-        mpl.pyplot.legend(legends)
-        mpl.pyplot.xlabel("Rank")
-        mpl.pyplot.ylabel("ln(Freq)")
-        mpl.pyplot.title("ln(Freq) vs Rank")
-        mpl.pyplot.show()
 
 
 
-    def lograph(self,  euler = False, aprox_sr = False, aprox_mr=False , my_mandel=False, power = False):
-
-        x = np.log(np.array(self.freq_rank["DenseRank"]))
-        z = np.array(self.freq_rank["LogFreq"])
-        z_zipf = np.array(self.freq_rank["Zipf"])
-
-        #mpl.rcParams["leyend.fontsize"] = 10
-
-        mpl.pyplot.plot(x,z)
-        mpl.pyplot.plot(x,z_zipf)
-        legends = ["Data", "Zifp\n Error:{}".format(self.zipf_square_err)]
-
-        if euler:
-            z_euler = np.array(self.freq_rank["AsumingE"])
-            mpl.pyplot.plot(x,z_euler, linestyle=":",  linewidth=10)
-            legends.append("Power:e\n Error:{}".format(self.assuminge_square_err))
-
-        if aprox_sr:
-            z_aprox = np.array(self.freq_rank["AproxEbySubranks"],)
-            mpl.pyplot.plot(x,z_aprox, linestyle="-.")
-            legends.append("Power: Aproximacion de e a n=maximo subrank ({})\n Error: {}".format(self.n, self.aprox_sr_square_err))
-
-        if aprox_mr:
-            z_aprox = np.array(self.freq_rank["AproxEbyRanks"])
-            mpl.pyplot.plot(x,z_aprox, linestyle="--")
-            legends.append("Power: Aproximacion de e a n=maximo rank ({})\n Error: {}".format(self.max_rank, self.aprox_mr_square_err
-            ))
-
-        if my_mandel:
-            z_mymandel = np.array(self.freq_rank["MyMandel"])
-            mpl.pyplot.plot(x,z_mymandel)
-            legends.append("MyMandel")
-
-        if power:
-            self.power_proof(power)
-            z_power = np.array(self.freq_rank["Power"])
-            mpl.pyplot.plot(x,z_power)
-            legends.append("Power:{}".format(power))
-
-        mpl.pyplot.legend(legends)
-        mpl.pyplot.xlabel("Ln(Rank)")
-        mpl.pyplot.ylabel("ln(Freq)")
-        mpl.pyplot.title("ln(Freq) vs ln(Rank)")
-        mpl.pyplot.show()
+    def zipf_structure(self):
+        self.zipf = np.log(self.freq_rank)
+        for rank in ["AvgRank", "DenRank", "MinRank", "MaxRank", "FirRank"]:
+            base_df = self.freq_rank[["Freq",rank]].groupby(rank).first()
+            x = np.log(np.array(base_df.index)).reshape(-1,1)
+            y = np.log(np.array(base_df["Freq"])).reshape(-1,1)
+            regressor = LinearRegression()
+            regressor.fit(x, y)
 
 
-    def errors_graph(self,  euler = False, aprox_sr = False, aprox_mr=False ,power_rank=False, power = False):
-
-        x = np.log(np.array(self.freq_rank["DenseRank"]))
-        z_zipf = np.array(self.freq_rank["ZipfSqError"])
-
-        #mpl.rcParams["leyend.fontsize"] = 10
-
-        mpl.pyplot.plot(x,z_zipf)
-        legends = ["Error cuadratico a zipf\n Media: {}".format(self.zipf_square_err)]
-
-        if euler:
-            z_euler = np.array(self.freq_rank["AsumingSqError"])
-            mpl.pyplot.plot(x,z_euler)
-            legends.append("Error cuadratico a modelo parametro e :e\n Error:{}".format(self.assuminge_square_err))
-
-        if aprox_sr:
-            z_aprox = np.array(self.freq_rank["AproxBySubranksSqError"])
-            mpl.pyplot.plot(x,z_aprox)
-            legends.append("Error cuadratico a modelo en  n=maximo subrank ({})\n Error: {}".format(self.n, self.aprox_sr_square_err))
-
-        if aprox_mr:
-            z_aprox = np.array(self.freq_rank["AproxByRanksSqError"])
-            mpl.pyplot.plot(x,z_aprox)
-            legends.append("Power: Aproximacion de e a n=maximo rank ({})\n Error: {}".format(self.max_rank, self.aprox_mr_square_err
-            ))
+            self.zipf_k[rank] = regressor.intercept_[0]
+            self.zipf_alpha[rank] = regressor.coef_[0][0]
 
 
-        """if mymandel:
-            z_mymandel = np.array(self.freq_rank["MyMandel"])
-            mpl.pyplot.plot(x,z_mymandel)
-            legends.append("MyMandel")"""
+            self.zipf[rank] = self.zipf_alpha[rank]*self.zipf[rank]+self.zipf_k[rank]
+            self.zipf["AbsEr"+rank] = abs(self.zipf[rank] - self.zipf["Freq"])
+            self.zipf["SqrEr"+rank] = (self.zipf[rank] - self.zipf["Freq"])**2
 
-        if power:
-            self.power_proof(power)
-            z_power = np.array(self.freq_rank["Power"])
-            mpl.pyplot.plot(x,z_power)
-            legends.append("Power:{}".format(power))
-
-        mpl.pyplot.legend(legends)
-        mpl.pyplot.legend(legends)
-        mpl.pyplot.xlabel("Ln(Rank)")
-        mpl.pyplot.ylabel("Square Error")
-        mpl.pyplot.title("Square Error vs ln(Rank)")
-        mpl.pyplot.show()
-
-        mpl.pyplot.show()
+            self.errors["ZMeanAE"+rank] = self.zipf["AbsEr"+rank].mean()
+            self.errors["ZMeanSE"+rank] = self.zipf["SqrEr"+rank].mean()
+            self.errors["ZMeanRSE"+rank] = (self.zipf["SqrEr"+rank].mean())**(1/2)
