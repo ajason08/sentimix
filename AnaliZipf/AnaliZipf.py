@@ -46,7 +46,55 @@ def euler_aprox(x):
         e += 1/np.math.factorial(i)
     return e
 
+def regresor(x,y):
+    regr = LinearRegression(fit_intercept=True, normalize=False, copy_X=True, n_jobs=8)
+    regr.fit(x,y)
+    k = regr.intercept_[0]
+    alpha = regr.coef_[0][0]
+    return (k, alpha)
 
+def gelbuck_sidorov(x,y,c):
+    cxi = c**x
+    bn1 = np.sum(x/cxi)
+    bn2 = np.sum((x*y)/cxi)
+    bn12 = bn1*bn2
+    bn3 = np.sum(x**2/cxi)
+    bn4 = np.sum(y/cxi)
+    bn34 = bn3*bn4
+    bn = bn12-bn34
+    bd1 = (bn1)**2
+    bd2 = bn3
+    bd3 = np.sum(1/cxi)
+    bd23 = bd2*bd3
+    bd = bd1-bd23
+    b = bn/bd
+    an1 = bn4
+    an2 = b*bd3
+    an = an1-an2
+    ad = bn1
+    a = an/ad
+    return (b,a)
+
+def graph_2d_common_x(x, y, knee,title, x_label, y_label, leyends):
+    n = len(y)
+    for i in range(0,n):
+        plt.plot(x, y[i], label=leyends[i])
+    plt.axvline(x=knee, ymin=0, color="r",  linestyle='dashed')
+    plt.title(title)
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.legend()
+    plt.show()
+
+def graph_3d_common_x(x, y, z, title, x_label, y_label, leyends):
+    mpl.rcParams["legend.fontsize"] = 10
+    fig = plt.figure
+    ax = fig.gca(projection="3d")
+    n = len(y)
+    for i in range(0,n):
+        ax.plot(x,y[i],z[i], label=leyends[i])
+    ax.leyend()
+    plt.show()
 
 class zipf():
 
@@ -64,7 +112,7 @@ class zipf():
     zipf_cero_cross = pd.DataFrame()
     alpha_cero_cross = {}
     k_cero_cross = {}
-    cero_trunkated = pd.DataFrame()
+    cero_trunkated = {}
 
     # ZipfModel 1 (alpha and k calc with sklearn linear regression)
     zipf_skl_lr = pd.DataFrame()
@@ -107,8 +155,10 @@ class zipf():
     rod_sigma = {}
 
     # Errors
-    Error = pd.DataFrame()
-    SqrEr = pd.DataFrame()
+    LinError = pd.DataFrame()
+    LinSqrEr = pd.DataFrame()
+    LogError = pd.DataFrame()
+    LogSqrEr = pd.DataFrame()
 
     # kness
     knees = {"AvgRank":pd.DataFrame(),
@@ -166,11 +216,21 @@ class zipf():
         # Set knees
         self.Knee()
 
+        # Set zipf models
+        self.ZipfSkl_lr(one_per_rank=True)
+        self.ZipfGS()
+
+
+        # Set mandelbroot
+
+        # Set My Models
+
+
 
 
     def Rank(self):
         # Order the frecuencies from high to low
-        self.freq_rank.sort_values(by="Freq", ascending = False)
+        self.freq_rank = self.freq_rank.sort_values(by="Freq", ascending = False)
         # Dense rank frecuencies from high to low
         self.freq_rank["AvgRank"] = self.freq_rank["Freq"].rank(method="average", ascending=False)
         self.freq_rank["DenRank"] = self.freq_rank["Freq"].rank(method="dense", ascending=False)
@@ -185,8 +245,13 @@ class zipf():
             self.alpha_cero_cross = self.k_cero_cross/np.log(self.freq_rank[rank].max())
             alpha = self.alpha_cero_cross
             self.zipf_cero_cross[rank] = -alpha*np.log(self.freq_rank[rank])+k
-            self.Error["ZZC".format(rank)] = np.log(self.freq_rank["Freq"])-self.zipf_cero_cross[rank]
-            self.SqrEr["ZZC".format(rank)] = (np.log(self.freq_rank["Freq"])-self.zipf_cero_cross[rank])**2
+
+            self.LinError["ZZC{}".format(rank)] = abs(self.freq_rank["Freq"]-np.exp(self.zipf_cero_cross[rank]))
+            self.LinSqrEr["ZZC{}".format(rank)] = (self.freq_rank["Freq"]-np.exp(self.zipf_cero_cross[rank]))**2
+
+            self.LogError["ZZC{}".format(rank)] = abs(np.log(self.freq_rank["Freq"])-(self.zipf_cero_cross[rank]))
+            self.LogSqrEr["ZZC{}".format(rank)] = (np.log(self.freq_rank["Freq"])-self.zipf_cero_cross[rank])**2
+
 
     def Knee(self):
         base = np.log(self.freq_rank)
@@ -199,7 +264,64 @@ class zipf():
             self.knees[rank] = base_rank
             for i in range (0, len(x)-1):
                 p3 = np.array([x[i],y[i]])
-                print(p1,p2,p3)
                 distance = np.linalg.norm(np.cross(p2-p1, p1-p3))/np.linalg.norm(p2-p1)
                 self.knees[rank]["Freq"].iloc[i] = distance
-            self.max_knees[rank] = self.knees[rank]["Freq"].max()
+            self.max_knees[rank] = [self.knees[rank]["Freq"].idxmax(), self.knees[rank]["Freq"].max()]
+            self.cero_trunkated[rank] = self.knees[rank].truncate(after=self.max_knees[rank][0])
+
+    """Zipfs"""
+
+    def ZipfSkl_lr(self, one_per_rank = True):
+        self.zipf_skl_lr = np.log(self.freq_rank)
+        for rank in ["AvgRank", "DenRank", "MinRank", "MaxRank", "FirRank"]:
+            if one_per_rank:
+                base_df = self.zipf_skl_lr.groupby(rank).first()
+                r = np.array(base_df.index).reshape(-1,1)
+                f = np.array(base_df["Freq"]).reshape(-1,1)
+            else:
+                base_df = self.zipf_skl_lr
+                r = np.array(base_df[rank]).reshape(-1,1)
+                f = np.array(base_df["Freq"]).reshape(-1,1)
+            self.k_skl_lr[rank], self.alpha_skl_lr[rank] = regresor(r,f)
+            self.zipf_skl_lr[rank] = self.alpha_skl_lr[rank]*self.zipf_skl_lr[rank]+self.k_skl_lr[rank]
+
+            self.LinError["ZSLR{}".format(rank)] = self.freq_rank["Freq"]-np.exp(self.zipf_skl_lr[rank])
+            self.LinSqrEr["ZSLR{}".format(rank)] = (self.freq_rank["Freq"]-np.exp(self.zipf_skl_lr[rank]))**2
+
+            self.LogError["ZSLR{}".format(rank)] = abs(np.log(self.freq_rank["Freq"])-self.zipf_skl_lr[rank])
+            self.LogSqrEr["ZSLR{}".format(rank)] = (np.log(self.freq_rank["Freq"])-self.zipf_skl_lr[rank])**2
+
+
+    def  ZipfGS(self):
+        self.zipf_gs_lr = np.log(self.freq_rank)
+        for rank in ["AvgRank", "DenRank", "MinRank", "MaxRank", "FirRank"]:
+            base_df = self.zipf_gs_lr
+            r = np.array(base_df[rank]).reshape(-1,1)
+            f = np.array(base_df["Freq"]).reshape(-1,1)
+            self.k_gs_lr[rank], self.alpha_gs_lr[rank] = gelbuck_sidorov(r,f,np.e)
+            self.zipf_gs_lr[rank] = self.alpha_gs_lr[rank]*self.zipf_gs_lr[rank]+self.k_gs_lr[rank]
+
+            self.LinError["ZGS{}".format(rank)] = abs(self.freq_rank["Freq"]-np.exp(self.zipf_gs_lr[rank]))
+            self.LinSqrEr["ZGS{}".format(rank)] = (self.freq_rank["Freq"]-np.exp(self.zipf_gs_lr[rank]))**2
+
+            self.LogError["ZGS{}".format(rank)] = abs(np.log(self.freq_rank["Freq"])-self.zipf_gs_lr[rank])
+            self.LogSqrEr["ZGS{}".format(rank)] = (np.log(self.freq_rank["Freq"])-self.zipf_gs_lr[rank])**2
+
+    def ZipfMLE(self):
+        pass
+
+    def ZipfSklLrTr(self):
+        pass
+
+
+    def PoliZipf(self):
+        pass
+
+    def Mandelbroot(self):
+        pass
+
+    def ManDriguezE(self):
+        pass
+
+    def MandriguezS(self):
+        pass
