@@ -78,8 +78,10 @@ def gelbuck_sidorov(x,y,c):
 
 def graph_2d_common_x(x, y, knee,title, x_label, y_label, leyends):
     n = len(y)
+    simbols = ["-", "^", "s", "o", "^", "^", "d"]
+
     for i in range(0,n):
-        plt.plot(x, y[i], label=leyends[i])
+        plt.plot(x, y[i], simbols[i], label=leyends[i], markeredgewidth=0.05)
     plt.axvline(x=knee, ymin=0, color="r",  linestyle='dashed')
     plt.title(title)
     plt.xlabel(x_label)
@@ -98,10 +100,16 @@ def graph_3d_common_x(x, y, z, title, x_label, y_label, leyends):
     plt.show()
 
 def Zipf_Model(r, k, s):
-    return k-s*np.log(r)
+    return k-s*r
 
 def Mandelbrot_Model(r, a, k, c, s):
     return a/(k+c*r)**s
+
+def Polizipf_Model(r, k, a, b, c, d)
+    return k/(a*x**3+b*x**2+c**x+d)
+
+def MandriguezSModel(r, k, alpha, s):
+    return np.exp((k+s*np.log(r))**s)
 
 def Zipf_Fit(r,f):
     popt, pcov  = curve_fit(Zipf_Model, np.array(r), np.array(f), p0=[f.max(),1] ,maxfev=5000)
@@ -109,6 +117,10 @@ def Zipf_Fit(r,f):
 
 def Mandelbrot_Fit(r,f):
     popt, pcov = curve_fit(Mandelbrot_Model, r, f, maxfev=5000)
+    return (popt)
+
+def Polizipf_Fit(r,f):
+    popt, pcov = curve_fit(Polizipf_Model, r, f, maxfev=5000)
     return (popt)
 
 
@@ -217,6 +229,7 @@ class zipf():
         self.ZipfSkl_lr(one_per_rank=True)
         self.ZipfGS()
         self.ZipfMLE()
+        self.ZipfSklLrTr()
 
 
         # Set mandelbroot
@@ -255,13 +268,14 @@ class zipf():
     def Knee(self):
         base = np.log(self.freq_rank)
         for rank in ["AvgRank", "DenRank", "MinRank", "MaxRank", "FirRank"]:
+
             base_rank = base[["Freq",rank]].groupby(rank).first()
-            x = np.array(list(base_rank.index))
+            x = np.array(base_rank.index)
             y = np.array(base_rank["Freq"])
             p1 = np.array([x[0], y[0]])
             p2 = np.array([x[-1], y[-1]])
             self.knees[rank] = base_rank
-            for i in range (0, len(x)-1):
+            for i in range (0, int(len(x)/2)):
                 p3 = np.array([x[i],y[i]])
                 distance = np.linalg.norm(np.cross(p2-p1, p1-p3))/np.linalg.norm(p2-p1)
                 self.knees[rank]["Freq"].iloc[i] = distance
@@ -309,10 +323,10 @@ class zipf():
     def ZipfMLE(self): # Really not MLE but curve_fit
         self.zipf_mle = np.log(self.freq_rank)
         for rank in ["AvgRank", "DenRank", "MinRank", "MaxRank", "FirRank"]:
-            base_df = self.zipf_mle
-            r = np.array(base_df[rank]).reshape(-1,1)
-            f = np.array(base_df["Freq"]).reshape(-1,1)
-            const = Zipf_Fit(base_df[rank],base_df["Freq"])
+            base_df = self.zipf_mle.groupby(rank).first()
+            r = np.array(base_df.index)
+            f = np.array(base_df["Freq"])
+            const = Zipf_Fit(r,f)
             self.k_mle[rank] = const[0]
             self.alpha_mle[rank] = const[1]
             self.zipf_mle[rank] = self.k_mle[rank]-(self.alpha_mle[rank]*self.zipf_mle[rank])
@@ -325,7 +339,22 @@ class zipf():
 
 
     def ZipfSklLrTr(self):
-        pass
+        self.zipf_skl_lr_tr = np.log(self.freq_rank)
+        for rank in ["AvgRank", "DenRank", "MinRank", "MaxRank", "FirRank"]:
+
+            base_df = self.zipf_skl_lr_tr.groupby(rank).first().truncate(after=self.max_knees[rank][0])
+            r = np.array(base_df.index).reshape(-1,1)
+            f = np.array(base_df["Freq"]).reshape(-1,1)
+
+            self.k_skl_lr_tr[rank], self.alpha_skl_lr_tr[rank] = regresor(r,f)
+            self.zipf_skl_lr_tr[rank] = self.alpha_skl_lr_tr[rank]*self.zipf_skl_lr_tr[rank]+self.k_skl_lr_tr[rank]
+
+            self.LinError["ZSLRTR{}".format(rank)] = self.freq_rank["Freq"]-np.exp(self.zipf_skl_lr_tr[rank])
+            self.LinSqrEr["ZSLRTR{}".format(rank)] = (self.freq_rank["Freq"]-np.exp(self.zipf_skl_lr_tr[rank]))**2
+
+            self.LogError["ZSLRTR{}".format(rank)] = abs(np.log(self.freq_rank["Freq"])-self.zipf_skl_lr_tr[rank])
+            self.LogSqrEr["ZSLRTR{}".format(rank)] = (np.log(self.freq_rank["Freq"])-self.zipf_skl_lr_tr[rank])**2
+
 
 
     def PoliZipf(self):
