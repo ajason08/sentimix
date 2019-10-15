@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from scipy.special import digamma
+from scipy.optimize import curve_fit
 from sklearn.linear_model import LinearRegression
 from sklearn import metrics
 import matplotlib as mpl
@@ -96,6 +97,21 @@ def graph_3d_common_x(x, y, z, title, x_label, y_label, leyends):
     ax.leyend()
     plt.show()
 
+def Zipf_Model(r, k, s):
+    return k-s*np.log(r)
+
+def Mandelbrot_Model(r, a, k, c, s):
+    return a/(k+c*r)**s
+
+def Zipf_Fit(r,f):
+    popt, pcov  = curve_fit(Zipf_Model, np.array(r), np.array(f), p0=[f.max(),1] ,maxfev=5000)
+    return (popt)
+
+def Mandelbrot_Fit(r,f):
+    popt, pcov = curve_fit(Mandelbrot_Model, r, f, maxfev=5000)
+    return (popt)
+
+
 class zipf():
 
     """
@@ -172,25 +188,6 @@ class zipf():
              "MaxRank":[],
              "FirRank":[]}
 
-    # Fractal structures and correspondig harmonics and e aproximations
-    avg_nest, sub_avgrank = 0, pd.DataFrame()
-    den_nest, sub_denrank = 0, pd.DataFrame()
-    min_nest, sub_minrank = 0, pd.DataFrame()
-    max_nest, sub_maxrank = 0, pd.DataFrame()
-    fir_nest, sub_firrank = 0, pd.DataFrame()
-
-    harm_avg = 0
-    harm_den = 0
-    harm_min = 0
-    harm_max = 0
-    harm_fir = 0
-
-    e_avg = 0
-    e_den = 0
-    e_min = 0
-    e_max = 0
-    e_fir = 0
-
     def __init__(self, bow):
         """
         Takes a BOW of words of a text and build his Zipfian estructure.
@@ -219,6 +216,7 @@ class zipf():
         # Set zipf models
         self.ZipfSkl_lr(one_per_rank=True)
         self.ZipfGS()
+        self.ZipfMLE()
 
 
         # Set mandelbroot
@@ -237,6 +235,7 @@ class zipf():
         self.freq_rank["MinRank"] = self.freq_rank["Freq"].rank(method="min", ascending=False)
         self.freq_rank["MaxRank"] = self.freq_rank["Freq"].rank(method="max", ascending=False)
         self.freq_rank["FirRank"] = self.freq_rank["Freq"].rank(method="first", ascending=False)
+
 
     def ZipfZeroCross(self):
         self.k_cero_cross = np.log(self.freq_rank["Freq"].max())
@@ -307,8 +306,23 @@ class zipf():
             self.LogError["ZGS{}".format(rank)] = abs(np.log(self.freq_rank["Freq"])-self.zipf_gs_lr[rank])
             self.LogSqrEr["ZGS{}".format(rank)] = (np.log(self.freq_rank["Freq"])-self.zipf_gs_lr[rank])**2
 
-    def ZipfMLE(self):
-        pass
+    def ZipfMLE(self): # Really not MLE but curve_fit
+        self.zipf_mle = np.log(self.freq_rank)
+        for rank in ["AvgRank", "DenRank", "MinRank", "MaxRank", "FirRank"]:
+            base_df = self.zipf_mle
+            r = np.array(base_df[rank]).reshape(-1,1)
+            f = np.array(base_df["Freq"]).reshape(-1,1)
+            const = Zipf_Fit(base_df[rank],base_df["Freq"])
+            self.k_mle[rank] = const[0]
+            self.alpha_mle[rank] = const[1]
+            self.zipf_mle[rank] = self.k_mle[rank]-(self.alpha_mle[rank]*self.zipf_mle[rank])
+
+            self.LinError["ZMLE{}".format(rank)] = abs(self.freq_rank["Freq"]-np.exp(self.zipf_mle[rank]))
+            self.LinSqrEr["ZMLE{}".format(rank)] = (self.freq_rank["Freq"]-np.exp(self.zipf_mle[rank]))**2
+
+            self.LogError["ZMLE{}".format(rank)] = abs(np.log(self.freq_rank["Freq"])-self.zipf_mle[rank])
+            self.LogSqrEr["ZMLE{}".format(rank)] = (np.log(self.freq_rank["Freq"])-self.zipf_mle[rank])**2
+
 
     def ZipfSklLrTr(self):
         pass
