@@ -28,7 +28,7 @@ def harmonic_g1(c,n,m):
     m (float): add power
     """
     harm = 0
-    for k in range (1,n):
+    for k in range (1,int(n)):
         oldharm = harm
         suma = c+k
         potencia = suma**m
@@ -76,12 +76,15 @@ def gelbuck_sidorov(x,y,c):
     a = an/ad
     return (b,a)
 
-def graph_2d_common_x(x, y, knee,title, x_label, y_label, leyends):
+def graph_2d_common_x(x, y, knee,title, x_label, y_label, leyends, curves = False):
     n = len(y)
     simbols = ["-", "^", "s", "o", "^", "^", "d"]
 
     for i in range(0,n):
-        plt.plot(x, y[i], simbols[i], label=leyends[i], markeredgewidth=0.05)
+        if not curves:
+            plt.plot(x, y[i], simbols[i], label=leyends[i], markeredgewidth=0.05)
+        else:
+            plt.plot(x, y[i], "-", label=leyends[i], markeredgewidth=0.05)
     plt.axvline(x=knee, ymin=0, color="r",  linestyle='dashed')
     plt.title(title)
     plt.xlabel(x_label)
@@ -102,26 +105,21 @@ def graph_3d_common_x(x, y, z, title, x_label, y_label, leyends):
 def Zipf_Model(r, k, s):
     return k-s*r
 
-def Mandelbrot_Model(r, a, k, c, s):
-    return a/(k+c*r)**s
-
-def Polizipf_Model(r, k, a, b, c, d)
-    return k/(a*x**3+b*x**2+c**x+d)
+def Mandelbrot_Model(r, k, q, s):
+    return np.log(k)-s*np.log(r+q)
 
 def MandriguezSModel(r, k, alpha, s):
-    return np.exp((k+s*np.log(r))**s)
+    return np.exp((k+s*np.log(r)))
 
 def Zipf_Fit(r,f):
     popt, pcov  = curve_fit(Zipf_Model, np.array(r), np.array(f), p0=[f.max(),1] ,maxfev=5000)
     return (popt)
 
 def Mandelbrot_Fit(r,f):
-    popt, pcov = curve_fit(Mandelbrot_Model, r, f, maxfev=5000)
+    n = 1/harmonic_g1(np.e,r.max(),1)
+    popt, pcov = curve_fit(Mandelbrot_Model, r, f, p0=[n, np.e, 1.000001] ,maxfev=500000000)
     return (popt)
 
-def Polizipf_Fit(r,f):
-    popt, pcov = curve_fit(Polizipf_Model, r, f, maxfev=5000)
-    return (popt)
 
 
 class zipf():
@@ -162,14 +160,9 @@ class zipf():
     alpha_skl_lr_tr = {}
     k_skl_lr_tr = {}
 
-    # PoliZipfModel (Model whith polinomic linear regresion)
-    polizipf = pd.DataFrame()
-    polizipf_coef =  {}
-
-    # Mandelbroot maximum likehood
-    mandel_mle = pd.DataFrame()
-    mandel_k = {}
-    mandel_alpha = {}
+    # Mandelbroot curve_fit
+    mandel = pd.DataFrame()
+    mandel_coef = {}
 
     # My model (Alpha and k caculated by maximum likehood estimation)
     rod_mle = pd.DataFrame()
@@ -233,6 +226,7 @@ class zipf():
 
 
         # Set mandelbroot
+        self.Mandelbrot()
 
         # Set My Models
 
@@ -275,11 +269,14 @@ class zipf():
             p1 = np.array([x[0], y[0]])
             p2 = np.array([x[-1], y[-1]])
             self.knees[rank] = base_rank
-            for i in range (0, int(len(x)/2)):
+            self.knees[rank]["Dist"] = pd.Series()
+            for i in range (int(len(x)/2), len(x)):
                 p3 = np.array([x[i],y[i]])
                 distance = np.linalg.norm(np.cross(p2-p1, p1-p3))/np.linalg.norm(p2-p1)
-                self.knees[rank]["Freq"].iloc[i] = distance
-            self.max_knees[rank] = [self.knees[rank]["Freq"].idxmax(), self.knees[rank]["Freq"].max()]
+                self.knees[rank]["Dist"].iloc[i] = distance
+            knee_rank = self.knees[rank]["Dist"].idxmax()
+            knee_freq = self.knees[rank].loc[knee_rank, "Freq"]
+            self.max_knees[rank] = [knee_rank, knee_freq, self.knees[rank]["Dist"].max()]
             self.cero_trunkated[rank] = self.knees[rank].truncate(after=self.max_knees[rank][0])
 
     """Zipfs"""
@@ -357,11 +354,26 @@ class zipf():
 
 
 
-    def PoliZipf(self):
-        pass
+    def Mandelbrot(self):
+        self.mandel = np.log(self.freq_rank)
+        for rank in ["AvgRank", "DenRank", "MinRank", "MaxRank", "FirRank"]:
+            base_df = self.freq_rank.groupby(rank).first()
+            r = np.array(base_df.index)
+            f = np.array(np.log(base_df["Freq"]))
 
-    def Mandelbroot(self):
-        pass
+            self.mandel_coef[rank] = Mandelbrot_Fit(f,r)
+            q = np.e#self.mandel_coef[rank][1]
+            s = np.e-1 #self.mandel_coef[rank][2]
+            k = base_df["Freq"].max()*harmonic_g1(q,r.max(),s)#self.mandel_coef[rank][0]
+
+            self.mandel[rank] = np.log(k)-s*np.log(self.freq_rank[rank]+q)
+
+            self.LinError["MA{}".format(rank)] = self.freq_rank["Freq"]-np.exp(self.mandel[rank])
+            self.LinSqrEr["MA{}".format(rank)] = (self.freq_rank["Freq"]-np.exp(self.mandel[rank]))**2
+
+            self.LogError["MA{}".format(rank)] = abs(np.log(self.freq_rank["Freq"])-self.mandel[rank])
+            self.LogSqrEr["MA{}".format(rank)] = (np.log(self.freq_rank["Freq"])-self.mandel[rank])**2
+
 
     def ManDriguezE(self):
         pass
