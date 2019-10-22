@@ -1,7 +1,8 @@
 import pandas as pd
 import numpy as np
-from scipy.special import digamma
+from scipy.special import digamma, zeta
 from scipy.optimize import curve_fit
+from scipy.optimize import fsolve
 from sklearn.linear_model import LinearRegression
 from sklearn import metrics
 import matplotlib as mpl
@@ -10,27 +11,37 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 
-def harmonic(x):
+def harmonic(n):
     """
-    Returns the armonic number of x
-    If s is complex the result becomes complex.
-    """
-    return digamma(x + 1) + np.euler_gamma
-
-def harmonic_g1(c,n,m):
-    """
-    Return the armonic generalized  number
-    for parameters by a for cicle
+    Calculates the harmonic number of x. If s is complex the result becomes complex.
+    sum of 1/x in range (1,x)
 
     Parameters:
-    c (int): add constant
-    n (int): sumatory count limit
-    m (float): add power
+    x (int): The upper index of the sumatory.
+
+    Returns:
+    (float): The harmonic number for x
+    """
+    return float(digamma(n + 1) + np.euler_gamma)
+
+def harmonic_g1(k,n,s):
+    """
+    Calculates the generalized form of the harmonic number with parameters (k, n, s).
+    sum of 1/(x+k)**s for x in rank (1,n)
+
+    Parameters:
+    k (int): Constant to add to the counter.
+    n (int): The upper limit of the sumatory
+    m (float): The power to apply over (x+k)
+
+    Returns:
+    (float): The generalized harmonic number for (k,n,s)
+
     """
     harm = 0
-    for k in range (1,int(n)):
+    for x in range (1,int(n)):
         oldharm = harm
-        suma = c+k
+        suma = k+x
         potencia = suma**m
         cociente = 1/potencia
         harm += cociente
@@ -38,10 +49,37 @@ def harmonic_g1(c,n,m):
             return harm
     return harm
 
-def harmonic_g2(c,n,m):
-    return harmonic_g1(0,c+n,m)-harmonic_g1(0,c+1,m)
+def harmonic_g2(k ,n, s):
+    """
+    Calculates the generalized form of the harmonic number with parameters (c, n m)
+    sum of 1/(x+c)**m for x in rank (1,n), uses harmonic_g1 and one generalized
+    harmonic number form propiety, takes less time.
 
-def euler_aprox(x):
+    Parameters:
+    k (int): Constant to add to the counter.
+    n (int): The upper limit of the sumatory
+    m (float): The power to apply over (x+k)
+
+    Returns:
+    (float): The generalized harmonic number for (k,n,s)
+    Parameters:
+    c (int): add constant
+    n (int): sumatory count limit
+    m (float): add power
+    """
+    return harmonic_g1(0,k+n,s)-harmonic_g1(0,k+1,m)
+
+def euler_aprox(n):
+    """
+    Calculates the sum of (1/x!) in the range (0, to n). this is an aprox to
+    euler's constant of n terms.
+
+    Parameters:
+    n (int): The upper index of the summatory
+
+    Returns:
+    (float): An aprox to e with the sum of (1/x!) for n
+    """
     e = 0
     for i in range(0, int(x)):
         e += 1/np.math.factorial(i)
@@ -106,7 +144,11 @@ def Zipf_Model(r, k, s):
     return k-s*r
 
 def Mandelbrot_Model(r, k, q, s):
-    return np.log(k)-s*np.log(r+q)
+    if  q > r.max():
+        return k/(r+q)**s
+    else:
+        return -5
+
 
 def MandriguezSModel(r, k, alpha, s):
     return np.exp((k+s*np.log(r)))
@@ -115,9 +157,9 @@ def Zipf_Fit(r,f):
     popt, pcov  = curve_fit(Zipf_Model, np.array(r), np.array(f), p0=[f.max(),1] ,maxfev=5000)
     return (popt)
 
-def Mandelbrot_Fit(r,f):
+def Mandelbrot_Fit(r,f,p):
     n = 1/harmonic_g1(np.e,r.max(),1)
-    popt, pcov = curve_fit(Mandelbrot_Model, r, f, p0=[n, np.e, 1.000001] ,maxfev=500000000)
+    popt, pcov = curve_fit(Mandelbrot_Model, r, f, p0=p ,maxfev=500000)
     return (popt)
 
 
@@ -358,15 +400,45 @@ class zipf():
         self.mandel = np.log(self.freq_rank)
         for rank in ["AvgRank", "DenRank", "MinRank", "MaxRank", "FirRank"]:
             base_df = self.freq_rank.groupby(rank).first()
+
             r = np.array(base_df.index)
-            f = np.array(np.log(base_df["Freq"]))
+            f = np.array(base_df["Freq"])
 
-            self.mandel_coef[rank] = Mandelbrot_Fit(f,r)
-            q = np.e#self.mandel_coef[rank][1]
-            s = np.e-1 #self.mandel_coef[rank][2]
-            k = base_df["Freq"].max()*harmonic_g1(q,r.max(),s)#self.mandel_coef[rank][0]
+            r_knee = np.exp(self.max_knees[rank][0])
+            f_knee = np.exp(self.max_knees[rank][1])
+            d_knee = np.exp(self.max_knees[rank][1])
 
-            self.mandel[rank] = np.log(k)-s*np.log(self.freq_rank[rank]+q)
+
+            def Mandelbroot_coef_for_zero_and_knee(p):
+                k,q,s = p
+                f0 = k-(r.max()+q)**s
+                f1 = k-f.max()*(1+q)**s
+                f2 = k-f_knee*(r_knee+q)**s
+                return (np.array([f0,f1,f2]))
+
+            # Hints
+            s_hint = np.log(f.max()/r.max())
+            q_hint = ((r_knee+1)*f_knee**(1/s_hint))/(f.max()**(1/s_hint))
+            k_hint = self.token_count/(harmonic_g1(q_hint,r.max(),s_hint))
+            #k_hint = f.max()*(1+q_hint)**s_hint
+
+            k, q, s = fsolve(Mandelbroot_coef_for_zero_and_knee, [k_hint,q_hint,s_hint], maxfev = 80000)
+            Hqrs = f.max()/harmonic_g1(q,r.max(),s)
+            self.mandel_coef[rank] = Mandelbrot_Fit(r, f, [k, q, s])
+            q_fit = self.mandel_coef[rank][1]
+            s_fit = self.mandel_coef[rank][2]
+            k_fit = self.mandel_coef[rank][0]
+
+            print ("------"+rank+"---")
+            print(k_hint, k, k_fit)
+            print(q_hint, q,q_fit)
+            print(s_hint, s,s_fit)
+            print ("------"+rank+"---\n\n")
+
+
+            self.mandel[rank] = np.log(k_hint) - s_hint*np.log(self.freq_rank[rank]+q_hint)
+            #self.mandel[rank] = np.log(k_fit)-s_fit*np.log(self.freq_rank[rank]+q_fit)
+            #self.mandel[rank] = np.log(k) - s*np.log(self.freq_rank[rank]+q)
 
             self.LinError["MA{}".format(rank)] = self.freq_rank["Freq"]-np.exp(self.mandel[rank])
             self.LinSqrEr["MA{}".format(rank)] = (self.freq_rank["Freq"]-np.exp(self.mandel[rank]))**2
