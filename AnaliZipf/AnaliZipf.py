@@ -36,7 +36,6 @@ def harmonic_g1(k,n,s):
 
     Returns:
     (float): The generalized harmonic number for (k,n,s)
-
     """
     harm = 0
     for x in range (1,int(n)):
@@ -85,14 +84,11 @@ def euler_aprox(n):
         e += 1/np.math.factorial(i)
     return e
 
-def regresor(x,y):
-    regr = LinearRegression(fit_intercept=True, normalize=False, copy_X=True, n_jobs=8)
-    regr.fit(x,y)
-    k = regr.intercept_[0]
-    alpha = regr.coef_[0][0]
-    return (k, alpha)
-
 def gelbuck_sidorov(x,y,c):
+    """
+
+    """
+
     cxi = c**x
     bn1 = np.sum(x/cxi)
     bn2 = np.sum((x*y)/cxi)
