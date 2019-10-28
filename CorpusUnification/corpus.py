@@ -1,9 +1,6 @@
 import pandas as pd
 import numpy as np
-import matplotlib as mpl
-import matplotlib.pyplot as plt
 from time import sleep
-from mpl_toolkits.mplot3d import Axes3D
 from itertools import groupby
 
 
@@ -107,7 +104,7 @@ class Document():
 
 
 
-    def zipflaw_graph(self, power, ranklevel,dim=3 ,gapz=[0]):
+    """def zipflaw_graph(self, power, ranklevel,dim=3 ,gapz=[0]):
 
 
         dataset = self.tf_idf(power, gaps=gapz)
@@ -142,7 +139,7 @@ class Document():
             plt.ylabel("log(Freq)")
             plt.show()
 
-        """dataset = self.tf_idf(gaps=gapz)[["LOG_NOR","IdealZipF","ERR","ERR2","DEN_RANK"]]
+        dataset = self.tf_idf(gaps=gapz)[["LOG_NOR","IdealZipF","ERR","ERR2","DEN_RANK"]]
         x = np.log(np.array(dataset["DEN_RANK"]))
         y = np.array(dataset["LOG_NOR"])
 

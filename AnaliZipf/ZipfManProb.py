@@ -252,11 +252,12 @@ def zipf_belevitch(x):
         AXm = Ym/Xm
     else:
         AXm=catalogue["AX"][0]
-    #A = (np.log(catalogue.iloc[0]["P(i)"]))/()
+
+    KX = np.exp(same_rank["x(i)"]/same_rank["x(i)"][3]+catalogue["AX"][3]*np.log(catalogue["i"]/catalogue["i"][3]))
 
 
     #Zipf aprox with AX1 and AXm
-    catalogue["ZAX1"] = np.exp((-catalogue["AX"]*np.log(catalogue["i"]/catalogue["i"][0])+catalogue["x(i)"][0]))/(n_tok)
+    catalogue["ZAX1"] = np.exp((-catalogue["AX"]*np.log(catalogue["i"]/catalogue["i"][0])+catalogue["x(i)"][0]))/KX[-1]#(n_tok)
     catalogue["ZAXm"] = np.exp((catalogue["AX"][-1]*np.log(catalogue["i"]/catalogue["i"][-1])+catalogue["x(i)"][-1]))*(catalogue["NormRank"].sum())/(catalogue["i"].max()**2)
 
     print(n_typ,n_tok, same_rank.shape, catalogue["N(i)"].max(), catalogue["i"].max(), same_rank.shape[0]*3000,

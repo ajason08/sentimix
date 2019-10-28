@@ -2,3 +2,5 @@ sentimix/spanglish/sintagmatrix.tsv
 sentimix/hindinglish/sintagmatrix.tsv
 run.py
 *.stm
+datasets.py
+data/
